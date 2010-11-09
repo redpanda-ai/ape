@@ -1,0 +1,4 @@
+"Vendor Name"	"Vendor ID"	"Vendor Field Name"	"Our Type"	"Our Field Name"
+"Abcam"	1234	"Interesting Spec"	"s"	"Description"
+"Abcam"	1234	"SKU"	"s"	"Catalog Number"
+"Abcam"	1234	"Product Name"	"i"	"Item Name"
