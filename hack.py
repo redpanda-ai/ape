@@ -14,11 +14,26 @@ FROM
 	rows = cursor.fetchall()
 	cnxn.close()
 
+	header,column_ordinal = '',0
+	for column in cursor.description:
+		header += "%s\t" % column[0]
+		column_ordinal += 1	
+	header = header[0:len(header)-1] + "\n"
+	sys.stdout.write(header)
 	for row in rows:
 		lenrow = len(row)
 		for i in range(lenrow):
 			sys.stdout.write(str(row[i]) + "\t")
 		sys.stdout.write("\n")
+
+def truncate_table():
+	command = "TRUNCATE TABLE LogShipping.dba_tools.product_candidates"
+	print command
+	cnxn = pyodbc.connect('DSN='+dsn+';UID='+uid+';PWD='+pwd)
+	cursor = cnxn.cursor()
+	cursor.execute(command)
+	cnxn.commit()
+	cnxn.close()
 
 def insert_to_table(products):
 	#assume for the moment that Catalog Numbers are unique
@@ -26,25 +41,29 @@ def insert_to_table(products):
 	x = ('1234', 0, '"s"', '"Catalog Number"')
 	uniqs = {}
 	for d in products:
-		if (str(d).find('"Catalog Number"') != -1):
+		if (str(d).find('Catalog Number') != -1):
 			uniqs[d] = products[d]
 
 	sorted_keys = sorted(uniqs.keys())
 	params = []
 	for k in sorted_keys:
+		#this stinks b/c there could be commas within the element_types
+		#try to think of a way that accepts commas
 		vendor_id, row_id, element_type_1, element_type_2 = \
 			str(k)[1:-1].split(",")
-		v = int(vendor_id.replace("'",""))
-		element_type_1 = element_type_1.replace('"','').replace("'","")
-		element_type_2 = element_type_2.replace('"','').replace("'","")
+		v = int(vendor_id[1:-1])
+		element_type_1 = element_type_1.strip()[1:-1]
+		element_type_2 = element_type_2.strip()[1:-1]
 		#making tuples for pydobc executemany
 		t = (v,row_id,element_type_1,element_type_2,uniqs[k].replace('"',""))
 		params.append(t) 
-	#print params
 	print params
-	command = " INSERT INTO LogShipping.dba_tools.product_candidates " + \
-	"(vendor_id, row_id, element_type_1, element_type_2, unique_thing) " + \
-	"values (?,?,?,?,?)"
+	#print params
+	command = """
+INSERT INTO LogShipping.dba_tools.product_candidates
+	(vendor_id, row_id, element_type_1, element_type_2, unique_thing)
+	values (?,?,?,?,?)
+"""
 	print command
 	cnxn = pyodbc.connect('DSN='+dsn+';UID='+uid+';PWD='+pwd)
 	cursor = cnxn.cursor()
@@ -88,8 +107,6 @@ FROM
 			sys.stdout.write(str(row[i]) + "\t")
 		sys.stdout.write("\n")
 
-
-
 def clean_up_dirty_text (string):
 	result = ""
 	for c in string: 
@@ -116,18 +133,18 @@ def map_products(file_name,products):
 	#get a list of product keys (e.g. "Vendor Name", "VendorID")
 	product_key_list = key_line.strip().split('\t')
 	product_keys, product_vals = {}, {}
+	#print "PKL " + str(product_key_list)
 	#convert it into a dictionary
 	for x in range(len(product_key_list)):
 		product_keys[product_key_list[x]] = x
 		product_vals[x] = product_key_list[x]
-	vendor_id_pos = product_keys['"Vendor ID"']
-	vendor_name_pos = product_keys['"Vendor Name"']
+	vendor_id_pos = product_keys['Vendor ID']
+	vendor_name_pos = product_keys['Vendor Name']
 
 	line_number = 0
 	for line in lines:
 		#get the product values
-		pv = line.strip().split('\t')
-		c = 0
+		c,pv = 0,line.strip().split('\t')
 		vid = pv[vendor_id_pos]
 		vname = pv[vendor_name_pos]
 		for item in pv:
@@ -138,25 +155,18 @@ def map_products(file_name,products):
 		line_number +=1
 
 
-if len(sys.argv) != 4:
-	print "usage: python " + sys.argv[0] + " <dsn> <sql_login> <sql_passwd>"
+if len(sys.argv) != 6:
+	print "usage: python " + sys.argv[0] + " <dsn> <sql_login> <sql_passwd> " + \
+	"<rules_file> <product_file>"
 	sys.exit(0)
-dsn,uid,pwd = sys.argv[1], sys.argv[2], sys.argv[3]
+dsn,uid,pwd,rules_file,product_file = sys.argv[1:6]
 
 rule_keys, rules, products = [], {}, {}
-make_rules("rules.tab")
-map_products("product_file.tab",products)
+make_rules(rules_file)
+map_products(product_file,products)
+truncate_table()
 insert_to_table(products)
 fetch_from_table()
 compare_to_database()
 
-#print "PRODUCT CANDIDATES:"
-#sorted_keys = sorted(products.keys())
-#for k,v in products.iteritems():
-#	print k,v
-#for k in sorted_keys:
-#	print k, products[k]
-#print "RULES:"
-#for k,v in rules.iteritems():
-#	print k,v
 
