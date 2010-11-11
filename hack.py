@@ -38,7 +38,7 @@ def truncate_table():
 def insert_to_table(products):
 	#assume for the moment that Catalog Numbers are unique
 	#filter out uniques
-	x = ('1234', 0, '"s"', '"Catalog Number"')
+	#x = ('1234', 0, '"s"', '"Catalog Number"')
 	uniqs = {}
 	for d in products:
 		if (str(d).find('Catalog Number') != -1):
@@ -57,8 +57,6 @@ def insert_to_table(products):
 		#making tuples for pydobc executemany
 		t = (v,row_id,element_type_1,element_type_2,uniqs[k].replace('"',""))
 		params.append(t) 
-	print params
-	#print params
 	command = """
 INSERT INTO LogShipping.dba_tools.product_candidates
 	(vendor_id, row_id, element_type_1, element_type_2, unique_thing)
@@ -124,6 +122,8 @@ def make_rules(file_name):
 	for line in lines:
 		v = line.strip().split('\t')
 		rules[(v[0],v[1],v[2])] = (v[3],v[4])
+	#isolate tiebreaker
+	# { '
 
 def map_products(file_name,products):
 	f = open(file_name, 'r')
@@ -133,7 +133,6 @@ def map_products(file_name,products):
 	#get a list of product keys (e.g. "Vendor Name", "VendorID")
 	product_key_list = key_line.strip().split('\t')
 	product_keys, product_vals = {}, {}
-	#print "PKL " + str(product_key_list)
 	#convert it into a dictionary
 	for x in range(len(product_key_list)):
 		product_keys[product_key_list[x]] = x
@@ -141,7 +140,7 @@ def map_products(file_name,products):
 	vendor_id_pos = product_keys['Vendor ID']
 	vendor_name_pos = product_keys['Vendor Name']
 
-	line_number = 0
+	line_number, found_matching_rule = 0,0
 	for line in lines:
 		#get the product values
 		c,pv = 0,line.strip().split('\t')
@@ -150,9 +149,14 @@ def map_products(file_name,products):
 		for item in pv:
 			t = (vname,vid,product_vals[c])
 			if t in rules:
+				found_matching_rule +=1
 				products[vid,line_number,rules[t][0], rules[t][1]] = item
 			c += 1
 		line_number +=1
+	if (found_matching_rule == 0):
+		sys.stdout.write("Matching rules not found!\n")
+#	print "Matching rules -> " + str(found_matching_rule)
+	print str(rules)
 
 
 if len(sys.argv) != 6:
