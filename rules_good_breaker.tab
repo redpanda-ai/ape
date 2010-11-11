@@ -1,0 +1,5 @@
+Vendor Name	Vendor ID	Vendor Field Name	Our Type	Our Field Name
+Exiqon	1234	catalogNumber	s	Catalog Number
+Exiqon	1234	item	i	Item Name
+Exiqon	1234	qty	s	Quantity
+Exiqon	1234	foo	t	catalogNumber + qty + Worthless Spec
