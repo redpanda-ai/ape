@@ -1,4 +1,4 @@
-import os, sys, operator, pyodbc, locale
+import os, sys, operator, pyodbc, locale, unicodedata
 
 locale.setlocale(locale.LC_ALL, 'en_US.utf8')
 
@@ -53,19 +53,11 @@ def truncate_table():
 	cnxn.commit()
 	cnxn.close()
 
-def insert_to_table(broken_ties):
+def insert_to_items(broken_ties):
 
 	sorted_keys = sorted(broken_ties.keys())
 	params = []
 	for k in sorted_keys:
-		#print str(k)
-		#print str(broken_ties[k])
-		#this stinks b/c there could be commas within the element_types
-		#try to think of a way that accepts commas
-	#	vendor_id, row_id, element_type_1, element_type_2 = \ str(k)[1:-1].split(",")
-	#	v = int(vendor_id[1:-1])
-		#making tuples for pydobc executemany
-		#t = (v,row_id,broken_ties[k].replace('"',""))
 		t = (broken_ties[k][0],broken_ties[k][1],k)
 		params.append(t) 
 	command = """
@@ -182,6 +174,28 @@ def map_products(file_name,products,broken_ties,unbroken_ties):
 	else:
 		print "Your tiebreaker is successful"
 
+def insert_to_attributes(products):
+	print "Inserting Attributes"
+	sorted_keys = sorted(products.keys())
+	params = []
+	for k in sorted_keys:
+		t = (k[0],k[1],k[2],k[3],clean_up_dirty_text(products[k]).encode('ascii'))
+		params.append(t) 
+	command = """
+INSERT INTO LogShipping.dba_tools.product_candidate_attributes
+	(vendor_id, row_id, attribute_type, attribute_name, attribute_value)
+	values (?,?,?,?,?)
+"""
+	print command
+	print str(params)
+	cnxn = pyodbc.connect('DSN='+dsn+';UID='+uid+';PWD='+pwd)
+	cursor = cnxn.cursor()
+	cursor.executemany(command,params)
+	cnxn.commit()
+	cnxn.close()
+
+	
+
 if len(sys.argv) != 6:
 	print "usage: python " + sys.argv[0] + " <dsn> <sql_login> <sql_passwd> " + \
 	"<rules_file> <product_file>"
@@ -193,7 +207,9 @@ unbroken_ties = []
 make_rules(rules_file)
 map_products(product_file,products,broken_ties,unbroken_ties)
 truncate_table()
-insert_to_table(broken_ties)
+#insert_to_items(broken_ties)
+insert_to_attributes(products)
+#print str(products)
 #fetch_from_table()
 #compare_to_database()
 
