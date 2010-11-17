@@ -50,11 +50,10 @@ initialize (void)
 	return conv_desc;
 }
 
-char *
-src_to_dst (iconv_t conv_desc, char * src)
+int
+src_to_dst (iconv_t conv_desc, char * src, char * dst)
 {
 	size_t iconv_value;
-	char * dst;
 	size_t src_len;
 	size_t dst_len;
 
@@ -77,12 +76,12 @@ src_to_dst (iconv_t conv_desc, char * src)
 	dst_start = dst;
 	src_start = src;
 
-	show_values("before", src_start, src_len_start, dst_start, dst_len_start);
+	//show_values("before", src_start, src_len_start, dst_start, dst_len_start);
 
 	iconv_value = iconv (conv_desc, & src, & src_len, & dst, & dst_len);
 
-	show_values("after", src_start, src_len_start, dst_start, dst_len_start);
-
+	//show_values("after", src_start, src_len_start, dst_start, dst_len_start);
+	return 0;
 }
 
 void
@@ -103,6 +102,7 @@ int main()
 	iconv_t conv_desc;
 
 	conv_desc = initialize();
-	out_string = src_to_dst(conv_desc, in_string);
+	src_to_dst(conv_desc, in_string, out_string);
 	finalize (conv_desc);
+	return 0;
 }
