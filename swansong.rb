@@ -4,16 +4,13 @@ require 'dbi'
 require 'ostruct'
 
 def truncate_attributes()
-	dsn, login, passwd, rules, pfile = ARGV[0],ARGV[1],ARGV[2]
 	cmd = 'TRUNCATE TABLE LogShipping.dba_tools.product_candidate_attributes'
-	db = DBI.connect("dbi:ODBC:" + dsn, login, passwd)
+	db = DBI.connect("dbi:ODBC:" + $dsn, $login, $passwd)
 	db.do(cmd)
 	db.disconnect
 end
 
 def insert_to_attributes()
-	dsn, login, passwd, rules, = ARGV[0],ARGV[1],ARGV[2],ARGV[3]
-	puts "inserting attributes"
 	big_insert = ''
 	for k,v in $product_attributes do
 		big_insert += "INSERT INTO LogShipping.dba_tools." \
@@ -22,27 +19,10 @@ def insert_to_attributes()
 		+ k.vid + "', '" + k.row_id + "', '" + k.attribute_type + "', '" \
 		+ k.attribute_name + "', '" + v + "')\n"
 	end
-	#puts big_insert
-	db = DBI.connect("dbi:ODBC:" + dsn, login, passwd)
+	db = DBI.connect("dbi:ODBC:" + $dsn, $login, $passwd)
 	db.do(big_insert)
 	db.disconnect
-end
-
-def foo()
-	dsn, login, passwd, rules, pfile = ARGV[0],ARGV[1],ARGV[2],ARGV[3],ARGV[4]
-	big_insert = ''
-	source = File.new(pfile, "r")
-	while line = source.gets
-		fields = line.split("\t")
-		field = fields[4].gsub("'","''")
-		fields[4].gsub!("'","''")
-		big_insert += "INSERT INTO LogShipping.dba_tools.ruby_test(data) " \
-		"VALUES ('" + fields[4] +  "')\n"
-	end
-	source.close
-	db = DBI.connect("dbi:ODBC:" + dsn, login, passwd)
-	db.do(big_insert)
-	db.disconnect
+	puts "Spreadsheet uploaded to database"
 end
 
 def make_rules(rules_file)
@@ -53,8 +33,7 @@ def make_rules(rules_file)
 	for line in lines do
 		vals = line.split("\t")
 		if vals[3] == "t"
-			$tiebreaker = vals[4]
-			puts "Tiebreaker found -> " + $tiebreaker
+			$tiebreaker = vals[4].strip
 		else
 			k,v = OpenStruct.new, OpenStruct.new
 			k.vendor_name, k.vendor_id, k.field_name = vals[0], vals[1], vals[2]
@@ -85,7 +64,7 @@ end
 
 def compose_tie_breaker(t_params)
 	c = 0
-	#compose the tiebreaker values, they are in the product_values
+	#compose the tiebreaker values
 	tiebreaker_value = ''
 	for location in t_params.locations do
 		tiebreaker_value += t_params.product_values[location]
@@ -100,12 +79,9 @@ def compose_tie_breaker(t_params)
 	tc.tiebreaker = tiebreaker_value
 	#place the tiebreaker_candidate in one of two buckets
 	if $broken_ties.has_key?(tiebreaker_value)
-		#puts "unbroken tie"
 		$unbroken_ties << tc
 	else
-		#puts "broken tie"
 		$broken_ties[tiebreaker_value] = tc
-		#puts "broken_ties -> #{$broken_ties.length.to_s()}"
 	end
 	return vendor
 end
@@ -140,11 +116,11 @@ def confirm_uniqueness(product_keys, product_vals, lines)
 				if (k == t)
 					found_matching_rule +=1
 					x = OpenStruct.new
-					x.vid = vendor.vid.to_s()
-					x.row_id = t_params.line_number.to_s()
-					x.attribute_type = v.our_type.to_s()
-					x.attribute_name = v.our_field_name.to_s().gsub("'","''")
-					$product_attributes[x] = item.to_s().gsub("'","''")
+					x.vid = vendor.vid.to_s().strip
+					x.row_id = t_params.line_number.to_s().strip
+					x.attribute_type = v.our_type.to_s().strip
+					x.attribute_name = v.our_field_name.to_s().gsub("'","''").strip
+					$product_attributes[x] = item.to_s().gsub("'","''").strip
 				end #end if
 			end #end for
 			c += 1
@@ -165,47 +141,106 @@ def confirm_uniqueness(product_keys, product_vals, lines)
 			$unbroken_ties << $broken_ties.delete(k)
 		end
 			
-		puts "Your tiebreaker does not break all ties, please correct it"
-		puts "broken_ties (count) -> " + $broken_ties.length.to_s()
-		puts "unbroken_ties (count) -> " + $unbroken_ties.length.to_s()
+		puts "Your tiebreaker, '#{$tiebreaker}', does not break all ties, please correct it"
 	else
 		puts "Your tiebreaker is successful."
+	end
 		puts "broken_ties (count) -> " + $broken_ties.length.to_s()
 		puts "unbroken_ties (count) -> " + $unbroken_ties.length.to_s()
+end
+
+def search_for_duplicates_in_database()
+	puts "Searching for duplicates in the database"
+	main_template = "
+SELECT itemid, COUNT(0) cnt
+FROM
+bcproduct.dbo.item i WITH (NOLOCK)
+INNER JOIN LogShipping.dba_tools.product_candidate_attributes a
+	ON a.attribute_value = i.item
+	AND a.attribute_type = 'i'
+	AND a.attribute_name = 'Item Name' _tb_specs
+INNER JOIN biocompare.dbo.item_vendor v
+	ON i.itemid = v.item_id
+	AND a.vendor_id = v.vendor_id
+WHERE
+	v.vendor_id = _vendor_id
+GROUP BY itemid
+HAVING COUNT(0) > 1"
+
+	tb_template = "
+-- tb spec
+INNER JOIN LogShipping.dba_tools.product_candidate_attributes s_tc_a
+	ON a.row_id = s_tc_a.row_id
+	AND s_tc_a.attribute_type = 's'
+	AND s_tc_a.attribute_name = 'tb'
+INNER JOIN biocompare.dbo.item_spec s_tc_b WITH (NOLOCK)
+	ON i.itemid = s_tc_b.item_id
+	AND s_tc_a.attribute_value = s_tc_b.spec
+INNER JOIN biocompare.dbo.item_spec_type s_tc_c WITH (NOLOCK)
+	ON s_tc_b.spec_type_id = s_tc_c.spec_type_id
+	AND s_tc_c.spec_type = s_tc_a.attribute_name"
+
+	new_tiebreaker = $tiebreaker
+	for k,v in $rules do
+		new_tiebreaker.sub!(k.field_name,v.our_field_name)
+		vendor_id = k.vendor_id
+	end
+
+	tb_clause,t,c = '', new_tiebreaker.split("+"), 0
+	for item in t do
+		tb_clause += tb_template.gsub(/tb/,item.strip).gsub(/tc/,c.to_s())
+		c += 1
+	end
+	select_duplicates = main_template.gsub(/_tb_specs/,tb_clause)
+	select_duplicates.gsub!(/_vendor_id/,vendor_id)
+	db = DBI.connect("dbi:ODBC:" + $dsn, $login, $passwd)
+	#puts select_duplicates
+	$database_duplicates = db.select_all(select_duplicates)
+	db.disconnect
+	dl = $database_duplicates.length
+	if dl > 0
+		puts "#{dl} database duplicates found, they will be ignored."
+	else
+		puts "0 database duplicates found, proceeding."
 	end
 end
 
+def produce_exception_report()
+	puts "produce_exception_report, BROKEN, not implemented"
+end
+
+def produce_insert_report()
+	puts "produce_insert_report, BROKEN, not implemented"
+end
+
+def produce_update_report()
+	puts "produce_update_report, BROKEN, not implemented"
+end
+
+def produce_delete_report()
+	puts "produce_delete_report, BROKEN, not implemented"
+end
+
+#main program start
+puts "Program starting"
 unless ARGV.length == 5
 	puts "usage: #{$0} <dsn> <sql_login> <sql_passwd> <rules_file> " \
 	"<product_file>"
 	exit
 end
-dsn, login, passwd, rfile, pfile = ARGV[0],ARGV[1],ARGV[2],ARGV[3],ARGV[4]
-
+$dsn, $login, $passwd, $rfile, $pfile = ARGV[0],ARGV[1],ARGV[2],ARGV[3],ARGV[4]
 $rules, $product_attributes = {}, {}
 $tiebreaker, $broken_ties, $unbroken_ties = '', {}, []
-make_rules(rfile)
-product_keys, product_vals, lines = crunch_product_file(pfile)
+$database_duplicates = []
+make_rules($rfile)
+product_keys, product_vals, lines = crunch_product_file($pfile)
 confirm_uniqueness(product_keys, product_vals, lines)
 truncate_attributes()
 insert_to_attributes()
-#print "PRODUCTS -> #{$product_attributes.to_s()}"
-puts "product_attributes_count -> #{$product_attributes.length.to_s()}"
-
-#lines = File.open(products).collect
-#select = db.prepare('SELECT TOP 10 * FROM bcproduct.dbo.item')
-#puts "Number of rows inserted: #{rows}"
-		#check tie breaker against rules
-		#c = 0
-		#for item in t_params.product_values do
-			#t = OpenStruct.new
-			#t.vendor_name, t.vendor_id = vendor.vid, vendor.name
-			#t.field_name = product_vals[c]
-			#found_matching_rule += 1
-			#if $rules.has_value?(t)
-			#	found_matching_rule +=1
-			#end
-			#c += 1
-		#end
-
-
+search_for_duplicates_in_database()
+produce_exception_report()
+produce_insert_report()
+produce_update_report()
+produce_delete_report()
+puts "Program complete"
+#main program finish
