@@ -3,8 +3,13 @@
 require 'dbi'
 require 'ostruct'
 
-def truncate_attributes()
-	cmd = 'TRUNCATE TABLE LogShipping.dba_tools.product_candidate_attributes'
+def delete_old_attributes_by_vendor_id()
+	#vendor_id = product_vals["Vendor ID"]
+	#puts "Vendor ID -> #{vendor_id}"
+	cmd = "
+DELETE FROM LogShipping.dba_tools.product_candidate_attributes
+WHERE vendor_id = #{$vendor_id.to_s().strip}"
+	#puts cmd
 	db = DBI.connect("dbi:ODBC:" + $dsn, $login, $passwd)
 	db.do(cmd)
 	db.disconnect
@@ -22,7 +27,7 @@ def insert_to_attributes()
 	db = DBI.connect("dbi:ODBC:" + $dsn, $login, $passwd)
 	db.do(big_insert)
 	db.disconnect
-	puts "Spreadsheet uploaded to database"
+	puts "Spreadsheet uploaded complete"
 end
 
 def make_rules(rules_file)
@@ -38,6 +43,9 @@ def make_rules(rules_file)
 			k,v = OpenStruct.new, OpenStruct.new
 			k.vendor_name, k.vendor_id, k.field_name = vals[0], vals[1], vals[2]
 			v.our_type, v.our_field_name = vals[3], vals[4]
+			if $vendor_id == 0
+				$vendor_id = vals[1]
+			end
 			$rules[k] = v
 		end
 	end
@@ -86,7 +94,7 @@ def compose_tie_breaker(t_params)
 	return vendor
 end
 
-def confirm_uniqueness(product_keys, product_vals, lines)
+def confirm_spreadsheet_row_uniqueness(product_keys, product_vals, lines)
 
 	t_params = OpenStruct.new
 	t_params.vid_pos = product_keys["Vendor ID"]
@@ -141,12 +149,13 @@ def confirm_uniqueness(product_keys, product_vals, lines)
 			$unbroken_ties << $broken_ties.delete(k)
 		end
 			
-		puts "Your tiebreaker, '#{$tiebreaker}', does not break all ties, please correct it"
+		puts "Your tiebreaker, '#{$tiebreaker}', produced" \
+		+ " #{$unbroken_ties.length.to_s()} unbroken ties."
+		puts "Those rows will be reported as exceptions."
 	else
 		puts "Your tiebreaker is successful."
 	end
-		puts "broken_ties (count) -> " + $broken_ties.length.to_s()
-		puts "unbroken_ties (count) -> " + $unbroken_ties.length.to_s()
+		puts "#{$broken_ties.length.to_s()} spreadsheet rows will be uploaded."
 end
 
 def search_for_duplicates_in_database()
@@ -199,14 +208,23 @@ INNER JOIN biocompare.dbo.item_spec_type s_tc_c WITH (NOLOCK)
 	db.disconnect
 	dl = $database_duplicates.length
 	if dl > 0
-		puts "#{dl} database duplicates found, they will be ignored."
+		puts "#{dl} duplicates found in database, reported as exceptions."
 	else
-		puts "0 database duplicates found, proceeding."
+		puts "0 database duplicates, proceeding."
 	end
 end
 
 def produce_exception_report()
-	puts "produce_exception_report, BROKEN, not implemented"
+	myfile = File.new("exception_report_#{$vendor_id.to_s().strip}.tab", "w")
+	myfile.puts("Exception Report\n")
+	myfile.puts("vendor_id\tline_number\ttiebreaker_value")
+	for item in $unbroken_ties do
+		#write item tab delimited
+		myfile.puts("#{item.vendor_id}\t#{item.line_number}" \
+		+ "\t#{item.tiebreaker}")
+	end
+	myfile.close
+	#puts "produce_exception_report, BROKEN, not implemented"
 end
 
 def produce_insert_report()
@@ -232,10 +250,11 @@ $dsn, $login, $passwd, $rfile, $pfile = ARGV[0],ARGV[1],ARGV[2],ARGV[3],ARGV[4]
 $rules, $product_attributes = {}, {}
 $tiebreaker, $broken_ties, $unbroken_ties = '', {}, []
 $database_duplicates = []
+$vendor_id = 0
 make_rules($rfile)
 product_keys, product_vals, lines = crunch_product_file($pfile)
-confirm_uniqueness(product_keys, product_vals, lines)
-truncate_attributes()
+confirm_spreadsheet_row_uniqueness(product_keys, product_vals, lines)
+delete_old_attributes_by_vendor_id()
 insert_to_attributes()
 search_for_duplicates_in_database()
 produce_exception_report()
