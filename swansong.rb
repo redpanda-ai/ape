@@ -209,9 +209,93 @@ INNER JOIN biocompare.dbo.item_spec_type s_tc_c WITH (NOLOCK)
 	dl = $database_duplicates.length
 	if dl > 0
 		puts "#{dl} duplicates found in database, reported as exceptions."
+		puts $database_duplicates
 	else
 		puts "0 database duplicates, proceeding."
 	end
+end
+
+def produce_insert_report()
+	puts "Producing insert report."
+	main_template = "
+SELECT y.row_id
+FROM
+	LogShipping.dba_tools.product_candidate_attributes y
+	LEFT JOIN 
+(
+SELECT a.row_id
+FROM
+bcproduct.dbo.item i WITH (NOLOCK)
+INNER JOIN LogShipping.dba_tools.product_candidate_attributes a
+	ON a.attribute_value = i.item
+	AND a.attribute_type = 'i'
+	AND a.attribute_name = 'Item Name' _tb_specs
+INNER JOIN biocompare.dbo.item_vendor v
+	ON i.itemid = v.item_id
+	AND a.vendor_id = v.vendor_id
+WHERE
+	v.vendor_id = _vendor_id
+) x
+	ON y.row_id = x.row_id
+WHERE
+	y.attribute_type = 'i'
+	AND x.row_id IS NULL"
+
+	tb_template = "
+-- tb spec
+INNER JOIN LogShipping.dba_tools.product_candidate_attributes s_tc_a
+	ON a.row_id = s_tc_a.row_id
+	AND s_tc_a.attribute_type = 's'
+	AND s_tc_a.attribute_name = 'tb'
+INNER JOIN biocompare.dbo.item_spec s_tc_b WITH (NOLOCK)
+	ON i.itemid = s_tc_b.item_id
+	AND s_tc_a.attribute_value = s_tc_b.spec
+INNER JOIN biocompare.dbo.item_spec_type s_tc_c WITH (NOLOCK)
+	ON s_tc_b.spec_type_id = s_tc_c.spec_type_id
+	AND s_tc_c.spec_type = s_tc_a.attribute_name"
+
+	new_tiebreaker = $tiebreaker
+	for k,v in $rules do
+		new_tiebreaker.sub!(k.field_name,v.our_field_name)
+		vendor_id = k.vendor_id
+	end
+
+	tb_clause,t,c = '', new_tiebreaker.split("+"), 0
+	for item in t do
+		tb_clause += tb_template.gsub(/tb/,item.strip).gsub(/tc/,c.to_s())
+		c += 1
+	end
+
+	select_new_products = main_template.gsub(/_tb_specs/,tb_clause)
+	select_new_products.gsub!(/_vendor_id/,vendor_id)
+	db = DBI.connect("dbi:ODBC:" + $dsn, $login, $passwd)
+	#puts select_new_products
+	ic = db.select_all(select_new_products)
+	db.disconnect
+	# collect row_ids for insert_candidates
+	insert_candidates = []
+	for row in ic do
+		insert_candidates << row[0]
+	end
+	#filter out exceptions
+	exceptions = []
+	for item in $unbroken_ties do
+		exceptions << item.line_number
+	end
+	for item in exceptions do
+		insert_candidates.delete(item)
+	end
+	#display filtered candidates
+	for item in insert_candidates do
+		puts "item -> #{item}"
+	end
+	icl = insert_candidates.length
+	if icl > 0
+		puts "#{icl} insert candidates found, adding to report"
+	else
+		puts "0 insert candidates found, proceeding."
+	end
+	#puts "produce_insert_report, BROKEN, not implemented"
 end
 
 def produce_exception_report()
@@ -225,10 +309,6 @@ def produce_exception_report()
 	end
 	myfile.close
 	#puts "produce_exception_report, BROKEN, not implemented"
-end
-
-def produce_insert_report()
-	puts "produce_insert_report, BROKEN, not implemented"
 end
 
 def produce_update_report()
