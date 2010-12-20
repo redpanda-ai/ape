@@ -203,7 +203,7 @@ INNER JOIN biocompare.dbo.item_spec_type s_tc_c WITH (NOLOCK)
 	select_duplicates = main_template.gsub(/_tb_specs/,tb_clause)
 	select_duplicates.gsub!(/_vendor_id/,vendor_id)
 	db = DBI.connect("dbi:ODBC:" + $dsn, $login, $passwd)
-	#puts select_duplicates
+	puts select_duplicates
 	$database_duplicates = db.select_all(select_duplicates)
 	db.disconnect
 	dl = $database_duplicates.length
@@ -286,9 +286,9 @@ INNER JOIN biocompare.dbo.item_spec_type s_tc_c WITH (NOLOCK)
 		insert_candidates.delete(item)
 	end
 	#display filtered candidates
-	for item in insert_candidates do
-		puts "item -> #{item}"
-	end
+	#for item in insert_candidates do
+	#	puts "item -> #{item}"
+	#end
 	icl = insert_candidates.length
 	if icl > 0
 		puts "#{icl} insert candidates found, adding to report"
@@ -313,10 +313,15 @@ end
 
 def produce_update_report()
 	puts "produce_update_report, BROKEN, not implemented"
+	puts "this will DELETE each spec provided by the spreadsheet for the item"
+	puts "and then INSERT the spec with the one provided for the item"
+	
 end
 
 def produce_delete_report()
 	puts "produce_delete_report, BROKEN, not implemented"
+	puts "this will DELETE all specs and then all items found in the database"
+	puts "that are not found in the spreadsheets"
 end
 
 #main program start
