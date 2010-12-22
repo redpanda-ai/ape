@@ -218,7 +218,7 @@ def confirm_index():
    command = "EXEC LogShipping.dba_tools.Update_crud_items_rundate " + \
    "@category_id=" + category_id + ", @flag='I'"
    print command
-   cnxn = pyodbc.connect('DSN='+dsn+';UID=jkey_sa;PWD=Mus3Musculus!')
+   cnxn = pyodbc.connect('DSN='+dsn+';UID=foo;PWD=bar')
    cursor = cnxn.cursor()
    cursor.execute(command)
    cnxn.commit()
