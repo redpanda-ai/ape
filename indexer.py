@@ -151,7 +151,7 @@ class ThreadProducer(threading.Thread):
 		", @es_index='" + es_index + "'" + \
 		", @es_type = '" + es_type + "'"
 		#sys.stdout.write(command)
-		cnxn = pyodbc.connect('DSN='+dsn+';UID=jkey_sa;PWD=Mus3Musculus!')
+		cnxn = pyodbc.connect('DSN='+dsn+';UID=foo;PWD=bar')
 		cursor = cnxn.cursor()
 		cursor.execute(command)
 		self.log(" [" + str(last_id) + ":" + \
