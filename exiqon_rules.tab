@@ -1,0 +1,15 @@
+Vendor Name	Vendor ID	Vendor Field Name	Our Type	Our Field Name
+Exiqon	1234	catalogNumber	spec	Catalog Number
+Exiqon	1234	Item Name	product_name	not read not used
+Exiqon	1234	biocompareUrl	spec	our_url
+Exiqon	1234	size	spec	our_size
+Exiqon	1234	us_price	price	not read not used
+Exiqon	1234	qty	spec	Quantity
+Exiqon	1234	host_is	category_group	Host Species
+Exiqon	1234	reacts_with	category_group	Reactivity
+Exiqon	1234	vcat	category	Category
+Exiqon	1234	Mark III	alias	Antibodies
+Exiqon	1234	Homo Sapiens	alias	Human
+Exiqon	1234	Bos Taurus	alias	Bovine
+Exiqon	1234	Murine	alias	Mouse
+Exiqon	1234	foo	tiebreaker	catalogNumber + qty
