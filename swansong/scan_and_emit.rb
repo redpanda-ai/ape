@@ -268,24 +268,30 @@ def produce_update_report()
 
 	attribute_change_template ="
 SELECT
-	matched_items.row_id, original_prices.itemid,
+	matched_items.row_id,
+	matched_items.itemid matched_item_id,
 	matched_items.attribute_type attribute_type,
 	original_prices.price old_value,
 	matched_items.attribute_value new_value,
-	original_prices.item item_name
+	matched_items.item_name item_name
 FROM
 (
-	SELECT a.row_id, i.itemid, x.attribute_value, x.attribute_type
+	SELECT a.row_id, i.itemid, i.item item_name,
+		x.attribute_value, x.attribute_type
 	FROM
 	bcproduct.dbo.item i
+	-- bind attributes to product by name
 	INNER JOIN LogShipping.dba_tools.product_candidate_attributes a
 		ON a.attribute_value = i.item
 		AND a.attribute_type = 'product_name'
-__attribute_stuff
 	INNER JOIN biocompare.dbo.item_vendor v
 		ON i.itemid = v.item_id
 		AND a.vendor_id = v.vendor_id
-	INNER JOIN LogShipping.dba_tools.product_candidate_attributes x
+	-- bind attributes to product by tiebreakers values
+__attribute_stuff
+	-- this is the attribute to update
+	-- INNER JOIN -> both SS and DB have attribute x
+	__inner_or_left JOIN LogShipping.dba_tools.product_candidate_attributes x
 		ON a.row_id = x.row_id
 		AND x.attribute_type = 'price'
 	WHERE
@@ -301,7 +307,11 @@ LEFT JOIN
 		AND p.enabled = 1
 ) original_prices
 	ON matched_items.itemid = original_prices.itemid
-WHERE original_prices.price != CAST(matched_items.attribute_value AS SMALLMONEY)
+WHERE 
+	original_prices.price != CAST(matched_items.attribute_value AS SMALLMONEY)
+	OR ( (matched_items.attribute_value IS NOT NULL)
+		AND (original_prices.price IS NULL) )
+ORDER BY matched_items.row_id
 "
 
 	cte_template = \
@@ -357,14 +367,23 @@ where spec_type = '__spec_type'
 		attribute_clause += bar
 		c += 1
 	end
-	attribute_change_clause = attribute_change_template
+	attribute_change_clause = \
+		attribute_change_template.gsub(/__inner_or_left/,"INNER")
+
 	attribute_change_clause.gsub!(/__vendor_id/,$vendor_id)
 	attribute_change_clause.gsub!(/__attribute_stuff/,attribute_clause)
 
-	update_prices = cte_clause + attribute_change_clause 
+#	insert_attribute_clause = \
+#		attribute_change_template.gsub(/__inner_or_left/,"LEFT")
+#	insert_attribute_clause.gsub!(/__vendor_id/,$vendor_id)
+#	insert_attribute_clause.gsub!(/__attribute_stuff/,attribute_clause)
 
+	change_prices = cte_clause + attribute_change_clause
+#	insert_prices = cte_clause + insert_attribute_clause
+
+	#UPDATE PRICE
 	db = DBI.connect("dbi:ODBC:" + $dsn, $login, $passwd)
-	up = db.select_all(update_prices)
+	up = db.select_all(change_prices)
 	db.disconnect
 	# collect row_ids for insert_candidates
 	# TO FIX: we don't need both $disable_candidates AND $items_to_disable :)
@@ -375,6 +394,25 @@ where spec_type = '__spec_type'
 		 "\t" + row[2].to_s() + "\t" + row[3].to_s() + "\t" + row[4].to_s() + \
 		 "\t" + row[5].to_s()
 	end
+
+	#filter out exceptions would go here, if we used them
+
+	puts change_prices
+
+	upl = $update_price_array.length
+	# emit update report
+	puts "EMIT: update_attribute_report_#{$vendor_id.to_s().strip}.tab " \
+	+ "(#{upl} items)"
+	myfile = File.new("update_attribute_report_#{$vendor_id.to_s().strip}.tab" \
+		, "w")
+	myfile.puts("Update Attribute Report\n")
+	myfile.puts("row_id\tmatched_item_id\tattribute_type\told_value" \
+		+ "\tnew_value" + "\titem_name")
+	for candidate in $update_price_array do
+		myfile.puts($update_price_hash[candidate])
+	end
+	myfile.close
+
 	#filter out exceptions
 =begin
 	exceptions = []
@@ -386,19 +424,7 @@ where spec_type = '__spec_type'
 		update_price_hash.delete(item)
 	end
 =end
-	upl = $update_price_array.length
 	puts "SUCCESS"
-
-	puts "EMIT: update_report_#{$vendor_id.to_s().strip}.tab (#{upl} items)"
-	myfile = File.new("update_report_#{$vendor_id.to_s().strip}.tab", "w")
-	myfile.puts("Update Report\n")
-	myfile.puts("row_id\titem_id\tattribute_type\told_value\tnew_value" + \
-		"\titem_name")
-	for candidate in $update_price_array do
-		myfile.puts($update_price_hash[candidate])
-	end
-	myfile.close
-
 
 end
 
