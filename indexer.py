@@ -200,7 +200,7 @@ def signal_handler( signal, frame) :
 
 def ensure_group_options_are_ready():
 	command = "SELECT COUNT(0) c FROM LogShipping.dba_tools.item_group_options"
-	cnxn = pyodbc.connect('DSN='+dsn+';UID=jkey_sa;PWD=Mus3Musculus!')
+	cnxn = pyodbc.connect('DSN='+dsn+';UID=foo;PWD=bar')
 	cursor = cnxn.cursor()
 	cursor.execute(command)
 	row = cursor.fetchone()
